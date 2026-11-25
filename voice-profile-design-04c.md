@@ -442,12 +442,22 @@ class VoiceSnapshot(BaseModel):
    见 §9：Voice Library/Profile CRUD、导入/校验/资产、兼容标记、三级选择、Provider/Runtime 绑定、测试；依赖现有 Provider/Coordinator/Runtime/Scheduler/注册脚本；不做模型训练、不做无重启跨模式、不做第三方声音、不承诺情绪、不把资产放 DB。
 
 8. **最终结论与逐 Profile 状态？**
-   整体 **CONDITIONAL GO**；无 Profile 达到 GO（都缺 10 文本复测/中文参考）：
-   - `builtin_speaker`：`ryan` 候选/CONDITIONAL；`vivian` default NO-GO；`serena`/`uncle_fu`/`aiden` 当前不推荐；CV 0.6B NO-GO；
-   - `designed_voice`：`cute_girl`/`young_female_gentle`/`mature_male_deep` 候选/CONDITIONAL；news/stern/old NO-GO；
-   - `reference_clone`：Base x-vector CONDITIONAL（需中文参考 + T07）；ICL Pending/NO-GO；
-   - 情绪：全部 experimental/NO-GO 正式使用；Base instruct 不可用。
-   不要求唯一默认；`providers.tts.type` 保持 `none`，直到某个 Profile 完成 10 文本复测并被用户确认。
+   整体 **CONDITIONAL GO**；**没有任何 Profile 达到 GO**（都缺 10 文本复测/中文参考）。逐 Profile：
+
+| Profile | 判定 |
+| --- | --- |
+| `cute_girl`（designed_voice） | **CONDITIONAL**（n=1；补 10 文本 + 修头部吞字） |
+| `ryan`（builtin_speaker） | **CONDITIONAL**（n=1；补 10 文本） |
+| `young_female_gentle`（designed_voice） | **CONDITIONAL**（n=1；补 10 文本） |
+| `mature_male_deep`（designed_voice） | **CONDITIONAL**（n=1；补 10 文本） |
+| Base x-vector（reference_clone） | **CONDITIONAL**（需用户中文参考 + T07 复测） |
+| `vivian`（builtin_speaker） | **NO-GO 作为默认**；长文本候选，不用于情绪 |
+| `serena` / `uncle_fu` / `aiden` | **NO-GO** |
+| VoiceDesign `news_anchor` / `stern_male` / `old_male_hoarse` | **NO-GO** |
+| CustomVoice 0.6B `vivian` | **NO-GO** |
+| Base ICL（EN auto ref_text） | **NO-GO / Pending**（可懂度 2；需中文参考 + 人工 ref_text） |
+
+   情绪：全部 experimental/NO-GO 正式使用；Base instruct 不可用。不要求唯一默认；`providers.tts.type` 保持 `none` 直到某个 Profile 完成 10 文本复测并被用户确认。
 
 ---
 
