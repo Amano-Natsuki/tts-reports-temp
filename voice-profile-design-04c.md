@@ -416,6 +416,16 @@ class VoiceSnapshot(BaseModel):
 - 不实现 GPU 硬隔离/显存分区；
 - 不修改 04D/04E 已验证的 Provider/播放/调度语义（只做兼容扩展）。
 
+### 9.4 对 Provider 契约/总纲的最小变更建议
+
+1. **`SpeechRequest`（providers/tts_base.py）**：新增可选 `voice_snapshot: VoiceSnapshot | None`；保留 `voice: str | None` 作为旧 Provider/MOSS 兼容；`SpeechProvider` Protocol 签名不变（`open_stream(request)`）。
+2. **`Qwen3TTSConfig`**：新增可选 `voice_profile_id` / `endpoint_id`（04F 使用）；`voice`/`instructions` 保留为兼容字段；`model_type` 仍是必填的兼容性声明。不要在本阶段改默认值。
+3. **错误码**：新增 `tts_profile_incompatible`（Profile 与已加载 Talker 不匹配）、`tts_profile_unavailable`（未配置/服务未启动）；现有 `tts_unknown_voice` 保留给旧请求。Provider 只在本地抛，不把绝对路径/ref_text 写进 error detail 给 LLM。
+4. **事件**：`speech.synthesis.started` payload 增加可选 `voice_profile_id`、`profile_type`；不新增事件类型，不改现有 UI 归约的必填字段。
+5. **Runtime**：`QwenTtsRuntime` 记录 active endpoint 的 `talker_mode`/`model_id`/commit；Profile 切换需要换 Talker 时走受控 start/stop（04E 现有能力）或提示 external 用户；Provider 不自行启停/切换模型。
+6. **总纲 v2.1**：无需改多音色目标；只需在 Provider 契约/实现状态里补“未设置默认 Profile = 未配置，禁止回退 vivian”“Base/CV/VD 不是同一实例可切换”。
+7. **`docs/qwen3-tts-provider.md` 同步建议**：把“04C 29 条待听”“默认 vivian”等旧句改为“29/29 已听；vivian 默认被否；多 Profile 见 `voice-profile-design-04c.md`；未设置默认时 `type=none`”。本次不改主项目文档。
+
 ---
 
 ## 10. 最终报告必须回答的 8 个问题
