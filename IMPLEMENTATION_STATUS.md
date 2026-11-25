@@ -1,6 +1,6 @@
 # 实现状态：Phase 04（MOSS-TTS Provider 与流式音频播放）/ Phase 04D（Qwen3-TTS GGML Provider）
 
-> 更新时间：2026-11-18
+> 更新时间：2026-11-18（04D/04E）；**2026-11-24 追加 §13 04C 人工试听回收**
 > 环境：Windows 10 专业版 10.0.19045 / Python 3.12.12 / PySide6 6.12.0 / httpx 0.28.1 /
 > numpy 2.5.5 / sounddevice 0.5.6 / uv 0.11.7 / RTX 4090 24 GB
 > 任务书：`00_项目总纲.md` + `04_任务书_MOSS_TTS与音频播放.md` + `04D_任务书_Qwen3-TTS_GGML_Provider正式接入.md`
@@ -10,8 +10,9 @@
 >
 > 结论：**任务书 04 §3 功能要求 10/10 落地、§6 验收 6/7 达标 + 1 项部分达标**；
 > **04D 已接入 Qwen3-TTS 主候选后端**（Provider/配置/工厂/装配/测试/真实服务验证/文档），
-> 判定沿用 04C 的 **CONDITIONAL GO**：性能/显存/取消/稳定性达标，**中文音色人工试听、用户中文参考音频、
-> 情绪稳定控制仍 Pending**。本节 §11 记录 04D；**§12 记录 04E**（GPU 调度 + Qwen 运行管理，
+> 整体判定沿用 04C 的 **CONDITIONAL GO**：性能/显存/取消/稳定性达标；但 **2026-11-24 回收的 29 条人工试听
+> 否决了 04C 原默认 `vivian` 与全部 CustomVoice 情绪指令**，中文参考/克隆仍未验收；当前默认配置单独判 **NO-GO**，
+> 详见 §13。本节 §11 记录 04D；**§12 记录 04E**（GPU 调度 + Qwen 运行管理，
 > 默认 `llm_priority`、`overlap` 实验、`sentence_interleave` 判定 unsupported，真实 4090 验收完成）。
 > **Phase 04A（2026-11-18）追加诊断**：实时播放断续的主因是 MOSS 生产速度（RTF 1.10–1.22）
 > 与突发节奏（块间隔 P99 0.58–0.69 s），不是播放器；并发 LLM decode 时 RTF≈3.1。
@@ -327,7 +328,7 @@ TTS 降级不影响文字、静音状态事件、`emit_chunk_events` 开关、�
 | 5 | 200–300 ms 初始预缓冲有实测依据、按 Provider 独立 | ✅ | `providers.tts.start_prebuffer_ms: 300`（Qwen）与全局 `audio.start_prebuffer_ms` 分离，MOSS 仍可 2500；用真实 `AudioPlayer` 验证（0 欠载） |
 | 6 | 取消是真停生成，下一请求可执行 | ✅ | §11.1 取消行；`cancel_ms=34.3`（客户端关闭耗时）、GPU 回落约 0.5 s、after_cancel TTFA 97.5 ms |
 | 7 | MOSS 仍可在 experimental 配置下使用，旧测试不回归 | ✅ | MOSS 代码未改；全量 683 项测试通过（含 MOSS/Mock/播放器/协调器） |
-| 8 | 默认是否启用 Qwen 由用户确认；未确认前保持安全默认 | ⏳ | `providers.tts.type` 仍是 `none`；04D 合并后由用户显式改成 `qwen3_tts`（**未静默改默认**） |
+| 8 | 默认是否启用 Qwen 由用户确认；未确认前保持安全默认 | ⏳ | `providers.tts.type` 仍是 `none`；04D 合并后由用户显式改成 `qwen3_tts`（**未静默改默认**）。04C 试听已回收，当前 `vivian` 默认被否，见 §13；仍未切换。 |
 
 ### 11.3 新增/修改文件
 
@@ -367,8 +368,9 @@ TTS 降级不影响文字、静音状态事件、`emit_chunk_events` 开关、�
 
 ### 11.5 未完成项与风险（04D 收口时）
 
-1. **人工试听未完成**：`docs/tts-samples-qwen/record.md` 的试听列留空；04C 的 29 条匿名样本同样待听。
-   在用户签字前不能写"音质验收通过"。
+1. **人工试听**：04C 的 29 条匿名样本已完成（2026-11-24，结果见 §13）；**04D 的 10 组
+   `docs/tts-samples-qwen/record.md` 仍待哥哥试听**。04C 的结论是当前默认 `vivian` 与全部情绪指令
+   被否决，换音色后需重做 10 文本复测；不能写“音质验收通过”。
 2. **中文参考/克隆未验收**：`qwen_voice_register.py` 已可用，但真实 Base 注册与克隆效果未在本轮验证。
 3. **情绪控制不稳定**：CustomVoice `instructions` 只透传、标 experimental；`ryan + angry/slow` 有漂移证据。
 4. **服务端无格式响应头**：靠 WAV 探针（首查多一次短合成，服务忙时可能延后为 `format=unverified`）。
@@ -486,7 +488,8 @@ TTS 降级不影响文字、静音状态事件、`emit_chunk_events` 开关、�
    Phase 10 的日志清理再统一。
 6. **健康巡检只到"进程+探针"级别**：不落 GPU 利用率曲线；曲线用探针脚本采样。
 7. **`sentence_interleave` 未实现**（审查结论 unsupported）；`overlap` 仍标实验。
-8. **人工试听/克隆/情绪验收仍 Pending**（承袭 04C/04D）。
+8. **人工试听/克隆/情绪验收**：04C 的 29 条已完成（§13）；结论是 **`vivian` 默认与全部 CV 情绪指令不合格**，
+   `ryan`/VoiceDesign 个别描述/Base x-vector 为候选；中文参考/克隆、换音色后的 10 文本复测仍未完成。
 
 ### 12.6 对下一阶段的接口
 
@@ -498,3 +501,79 @@ TTS 降级不影响文字、静音状态事件、`emit_chunk_events` 开关、�
   才能自动受 `llm_priority` 约束；不要另开不受控 TTS 通道。
 - **Phase 07（线上模型）**：给线上 Provider 声明 `resource="remote"`（或让用户设
   `gpu.llm_local_gpu=no`），调度器就不会因为它门控本地 TTS。
+
+## 13. Phase 04C 人工试听回收（2026-11-24）
+
+> 输入：`F:\AI_Project\Qwen3-TTS-Experiments\docs\listening-sheet-04c.md`（29 条评分）+
+> `docs/listening-key-04c.md`（解码）+ `docs/qwen3-tts-decision-04c.md` §9。
+> 本阶段**只整理验收结果与文档**，未改生产代码、Provider、SpeechCoordinator、AudioPlayer 或主配置。
+
+### 13.1 评分完整性
+
+| 项 | 结果 |
+| --- | --- |
+| 样本 | 29/29（A01–A29） |
+| 五维评分 | 29/29 有值；无缺分、无越界 |
+| 解码 | 29/29 匹配 key + 原始 probe（模型/RTF/TTFA 已回填） |
+| 备注 | 29/29 有备注 |
+| 环境 | 日期/试听人/音频目录已补；耳机/播放器/房间未记录 |
+| 协议偏差 | 16 条无情绪指令的样本也填了“情绪符合”；汇总时**不计入情绪结论**，只作整体语气参考；VoiceDesign 的“情绪”按描述符合解读 |
+
+### 13.2 主观汇总（均值；机械感越低越好）
+
+| 模型 | n | 音色相似 | 自然度 | 情绪符合 | 可懂度 | 机械感 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base x-vector（英文参考） | 5 | 4.00 | 3.80 | N/A | 4.60 | **2.00** |
+| Base ICL（EN 自动 ref_text） | 1 | 4.00 | 4.00 | N/A | **2.00** | 2.00 |
+| CV 1.7B（全部） | 16 | 3.56 | **2.38** | 2.43（7） | 4.12 | **3.38** |
+| CV 1.7B `ryan`（单项） | 1 | 4.00 | 4.00 | 5.00 | 5.00 | **1.00** |
+| CV 1.7B `vivian`（12 条） | 12 | 3.75 | 2.58 | 2.43（7） | 4.08 | 3.25 |
+| CV 0.6B `vivian`（单项） | 1 | 3.00 | **1.00** | 2.00 | 3.00 | **4.00** |
+| VoiceDesign 1.7B（全部） | 6 | 2.83 | 2.83 | 2.83 | 4.33 | 3.17 |
+
+### 13.3 关键主观结论
+
+- **默认 `vivian` 被否决**：12 条均值自然 2.58/机械 3.25；A28 中性 3/2/2/4/5、A01 slow 4/3/3/4/5、
+  A06 sad 4/1/1/3/5、A13 gentle 4/1/3/4/5。仅 A08（T10）、A16（T01）、A26（T03）长文本尚可。
+- **CV 1.7B 情绪 6/7 不合格**：neutral/gentle/happy/sad/angry/slow 均差；`fast` 4/4/3/3/2 仅“勉强”，
+  全部只能标 experimental，**不得正式使用**。
+- **`ryan` 是 CV 唯一强项**：A20 4/4/5/5/1“整体不错”，但只有 1 条，需补测。
+- **VoiceDesign 双峰**：`cute_girl` 5/5/5/5/1、`young_female_gentle` 4/4/4/5/2、
+  `mature_male_deep` 4/4/3/5/2 可用；`news_anchor` 1/1/2/3/5、`stern_male` 1/1/1/3/5、
+  `old_male_hoarse` 2/2/2/5/4 不可用。
+- **Base x-vector 自然度最好**：5 条均值 4.00/3.80/4.60/2.00；A03/A22/A23/A24 好，A15（T07）弱；
+  当前是英文参考，**不是最终中文音色**。
+- **Base ICL 不可用**：A04 4/4/3/2/2，可懂度 2（开头英文残留/吐字不清）。
+- **`serena`/`uncle_fu`/`aiden`/0.6B CV**：自然度 1、机械感 4–5，均拒绝。
+
+### 13.4 音色选择建议（按主观评分）
+
+| 优先级 | 候选 | 评分 | 条件 |
+| --- | --- | --- | --- |
+| 1 | VoiceDesign `cute_girl` | 5/5/5/5/1 | 女性/可爱首选；补 10 文本 + 修“头部吞字” |
+| 2 | CustomVoice `ryan` | 4/4/5/5/1 | 男性首选；补 10 文本 |
+| 3 | VoiceDesign `young_female_gentle` | 4/4/4/5/2 | 稳健女性备选 |
+| 4 | VoiceDesign `mature_male_deep` | 4/4/3/5/2 | 男性备选 |
+| 5 | Base x-vector | 5 条均值 4.00/3.80/4.60/2.00 | 需中文参考 + T07 复测 |
+| — | `vivian` | 12 条均值 3.75/2.58/4.08/3.25 | 仅长文本候选，不默认 |
+| — | `serena`/`uncle_fu`/`aiden`/0.6B/ICL/VD news-stern-old | 见 §13.3 | 拒绝 |
+
+### 13.5 三类路径与情绪适用性
+
+- **Base 克隆（x-vector）**：**条件适用**。普通文本自然/可懂好；T07 弱；需中文参考 + 10 文本复测。
+- **Base ICL**：**暂不适用**。可懂度 2；必须中文参考 + 人工校对 `ref_text`。
+- **CustomVoice**：**仅 `ryan` 条件适用**；`vivian` 不适用；`serena`/`uncle_fu`/`aiden` 拒绝。
+- **VoiceDesign**：**按描述条件适用**；3 条好/3 条差，不能整体默认。
+- **情绪指令**：Base instruct（GGML）不可用；CV `vivian` 全部不得正式使用（`fast` 仅 experimental）；
+  VoiceDesign 描述不是情绪控制。
+
+### 13.6 最终决策
+
+**整体 `CONDITIONAL GO`；当前默认 `vivian` 与全部 CustomVoice 情绪指令单独 `NO-GO`。**
+
+- 维持 `providers.tts.type=none`，**不静默切换默认**；04D Provider/04E 调度代码保留。
+- `instructions` 默认禁用；若 UI 保留，只能标 experimental（当前没有可正式启用的指令）。
+- 转 GO 条件：选定 §13.4 候选之一 → 10 文本复测（≥3 条/类）→ 情绪按需 ≥20 次抽检 →
+  Base/ICL 使用用户中文参考 + 人工 `ref_text`。
+- 证据：`F:\AI_Project\Qwen3-TTS-Experiments\benchmarks\04c\listening-scores.json`、
+  `listening-summary.md`、`docs/qwen3-tts-decision-04c.md` §9。
