@@ -3,7 +3,7 @@
 > 任务书：`04C_任务书_Qwen音质情绪与GPU调度验收.md`（§3.2、§3.3、§5 情绪部分）
 > 环境：Windows 10 19045 / RTX 4090 24 GB；qwentts.cpp `2edb35f`；Torch 对照为 `faster-qwen3-tts 0.5.4` + `transformers 5.15.1`
 > 原始数据：`benchmarks/04c/emotion-torch17b/`、`customvoice-17b/`、`customvoice-06b/`、`voicedesign-17b/`、`emotion-metrics-*.json`、`contract-*.json`
-> **状态：客观代理指标完成；人工试听 Pending。本文不把"模型有反应"写成"情绪稳定可控"。**
+> **状态：客观代理指标完成；29 条人工试听已完成（2026-11-24）。结果：`vivian` 的 7 条情绪/语气中 **6 条不合格**，`fast` 仅“勉强”；全部情绪指令均不得正式使用。详见 `qwen3-tts-decision-04c.md` §9。本文不把“模型有反应”写成“情绪稳定可控”。**
 
 ---
 
@@ -11,10 +11,10 @@
 
 1. **GGML Base 完全不接受 instruct**：`POST /v1/audio/speech` 带 `instructions` → **HTTP 400**，错误原文 `--instruct is not supported for base models`（`benchmarks/04c/contract-base.json`）。所以"Base 情绪指令"在**生产 GGML 后端上不是一个可用能力**；04B 报告里的 Base instruct 数据是 Torch 后端的结果。
 2. **Torch 1.7B Base 的 instruct 比 04B 的 0.6B 更"有反应"**：同一句中文、8 组指令 × 3 seed，`slow` 时长 +24.4%、`fast` −22.2%；`happy`/`angry` 的 F0 中位分别 +14.2%/+12.0%，`gentle` 的 voiced ratio 从 0.68 升到 0.85。**但 `sad` 几乎只改停顿/音高分布，不改时长；不能仅凭时长断言"情绪成功"。**
-3. **CustomVoice 1.7B 的 instruct 是 GGML 上唯一可用的风格控制路径**：`vivian` 上 `fast` 时长 −25%、`slow` +102%、`angry` F0 +48%；`ryan` 上 `angry` F0 从 95 Hz 跳到 233–268 Hz、`slow` 出现过 16.72 s 的重复/拖长异常。**响应真实，但稳定性不足以称为"稳定情绪控制"**；必须人工试听并逐 speaker 验证。
+3. **CustomVoice 1.7B 是 GGML 上唯一有 instruct 的路径（但主观不合格）**：`vivian` 上 `fast` 时长 −25%、`slow` +102%、`angry` F0 +48%；`ryan` 上 `angry` F0 从 95 Hz 跳到 233–268 Hz、`slow` 出现过 16.72 s 的重复/拖长异常。**响应真实，但主观试听（2026-11-24）6/7 不合格，`fast` 仅“勉强”，不能称为“稳定情绪控制”**；全部指令标 experimental。
 4. **0.6B CustomVoice 也能听 instruct**（官方总表把 0.6B 的 Instruction Control 留空，实测是能用的）：`fast` −28%、`angry` F0 +31%、`slow` +7%；但只测了 2 seed/1 speaker，且音色/自然度弱于 1.7B，只能作低显存备选。
-5. **VoiceDesign 1.7B 的描述→音色映射明显**：中文/英文描述都能让 F0 落在 69–389 Hz 的不同区间（详见 `qwen3-tts-voice-quality.md` §4.2）。这是"无参考音频造音色"的可行路径，但主观质量 Pending。
-6. **没有任何一组可以写"情绪验收通过"**：29 条匿名样本已备好（含 7 条 vivian 情绪），等用户盲听。
+5. **VoiceDesign 1.7B 的描述→音色映射明显**：中文/英文描述都能让 F0 落在 69–389 Hz 的不同区间（详见 `qwen3-tts-voice-quality.md` §4.2）。这是“无参考音频造音色”的可行路径；主观试听 3/6 描述可用（cute/young female/mature male），3/6 不可用。
+6. **没有任何一组可以写“情绪验收通过”**：29 条匿名样本已由哥哥本人盲听（2026-11-24），`vivian` 的 7 条情绪/语气中 6 条不合格，`fast` 仅“勉强”；详见 §6。
 
 ---
 
@@ -138,19 +138,23 @@
 
 ---
 
-## 6. 人工试听与待办
+## 6. 人工试听结果（2026-11-24）
 
-已匿名化 29 条，其中情绪相关 7 条（vivian neutral/gentle/happy/sad/angry/slow/fast）+ 6 条 VoiceDesign + 4 条其他 speaker。清单与解码表：
+**7 条 vivian 情绪/语气中 6 条不合格，`fast` 仅“勉强”**，详见 `qwen3-tts-decision-04c.md` §9：
 
-- `docs/listening-sheet-04c.md` §10（评分表）
-- `docs/listening-key-04c.md`（评分后才看）
+| 指令 | 音色相似/自然度/情绪符合/可懂度/机械感 | 结论 |
+| --- | --- | --- |
+| neutral | 3/2/2/4/5 | ❌ 基础中性也被否 |
+| gentle | 4/1/3/4/5 | ❌ 机器感极重 |
+| happy | 4/2/3/5/4 | ❌ 有点生硬 |
+| sad | 4/1/1/3/5 | ❌ 明显不像人类 |
+| angry | 3/1/2/4/3 | ❌ 情绪明显异常 |
+| slow | 4/3/3/4/5 | ❌ 语速太慢、奇怪 |
+| fast | 4/4/3/3/2 | ⚠️ 仅“勉强”，只能 experimental |
 
-**请用户重点回答**：
+**VoiceDesign 6 条描述**：`cute_girl` 5/5/5/5/1、`young_female_gentle` 4/4/4/5/2、`mature_male_deep` 4/4/3/5/2 可用；`news_anchor`/`stern_male`/`old_male_hoarse` 不可用。描述不是情绪指令，不能当情绪控制。
 
-1. Base/CustomVoice/VoiceDesign 三种音色来源，哪种最像"想要的桌面陪伴角色"？
-2. CustomVoice `vivian` 的 7 个情绪，哪些是"听得出"、哪些只是"变慢/变快"？
-3. `ryan + angry/slow` 的音色漂移/超长，是否能接受？若不能，生产只保留中文母语 speaker。
-4. 是否需要稳定情绪控制？如果需要，是否接受"CustomVoice + 固定 speaker + 少量指令"并继续做 20 次稳定性抽检？
+**结论**：Base instruct（GGML）不可用；CustomVoice `vivian` 没有可正式启用的情绪指令；`fast` 只能作为 experimental 候选重测。若需要稳定情绪，必须先换主观合格音色并做 ≥20 次/指令抽检。
 
 ---
 
@@ -158,7 +162,7 @@
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| 人工试听（情绪/自然度） | **Pending** | 不能签"情绪验收通过" |
+| 人工试听（情绪/自然度） | **✅ 已完成（2026-11-24）** | 6/7 不合格，`fast` 仅“勉强”；不能签“情绪验收通过” |
 | Base instruct on GGML | **不可用** | 400；Provider 必须拒绝或禁用 |
 | CustomVoice 20 次/指令稳定性 | 未做 | 本轮每指令 2 seed；ryan 已暴露漂移 |
 | 0.6B CV 的情绪矩阵 | 只做 1 speaker × 3 指令 ×2 seed | 不足以推荐为情绪路径 |
