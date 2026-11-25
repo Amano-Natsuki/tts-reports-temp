@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | 04A | MOSS 实时播放断续诊断 | ✅ 完成（主项目） | `F:\AI_Project_Development\docs\phase04a-realtime-playback-diagnosis.md` |
 | 04B | Qwen3-TTS 生态调研 + 4090 实测 | ✅ 完成 | `QWEN3_TTS_RESEARCH.md`、`QWEN3_TTS_BENCHMARK.md`、`DECISION.md` |
-| **04C** | **中文音色/克隆、Base 情绪、CustomVoice/VoiceDesign、1.7B 并发与调度** | **✅ 技术验证完成；✅ 29 条人工试听完成；默认 vivian/情绪被否；中文参考/换音色复测 Pending** | 见 §2 |
+| **04C** | **中文音色/克隆、Base 情绪、CustomVoice/VoiceDesign、1.7B 并发与调度** | **✅ 技术验证完成；✅ 29 条人工试听完成；默认 vivian/情绪被否；多 Profile 复测/中文参考 Pending** | 见 §2 |
 
 ---
 
@@ -24,6 +24,7 @@
 | `docs/qwen3-tts-emotion.md` | GGML Base 拒绝 instruct 的契约证据、Torch 1.7B Base 8 指令 ×3、CustomVoice 1.7B/0.6B instruct、VoiceDesign 描述、7 条情绪试听结果 |
 | `docs/qwen3-tts-concurrency.md` | LLM/TTS 单独、0.6B/1.7B 并发、长重叠、串行、恢复、断连取消、显存相位、04E 建议 |
 | `docs/qwen3-tts-decision-04c.md` | **CONDITIONAL GO（整体）/ 当前 vivian 与情绪 NO-GO**、§9 人工试听回填、04D 接入配置、风险、主项目状态更新建议 |
+| `docs/voice-profile-design-04c.md` | 多音色 VoiceProfile 类型、数据结构、兼容矩阵、选择优先级、资产生命周期、04F 建议 |
 | `docs/recording-guide-zh.md` | 中文参考音频录制指南（5–15 s、24 kHz+、单声道、ref_text 人工校对、隐私授权） |
 | `docs/listening-sheet-04c.md` | 29 条实际产物表 + 已填评分 + 模型级汇总（2026-11-24） |
 | `docs/listening-key-04c.md` | 解码表（评分已完成，可复核） |
@@ -61,7 +62,7 @@
 ## 4. 关键结论（一句话版）
 
 1. **技术主方案仍是 1.7B GGML Q8_0**：常驻增量 3,027 MiB（约 3.17 GB）、暖机 TTFA 15–42 ms、RTF 0.09–0.10、71.2 s 长音频零欠载、20/20 稳定、断连 313 ms 真停。
-2. **默认 `vivian` 被 2026-11-24 人工试听否决**：12 条均值自然 2.58/机械 3.25；短句中性 A28 2/5、7 条情绪中 6 条差（`fast` 仅勉强）。候选改为 VoiceDesign `cute_girl`、CustomVoice `ryan`、VoiceDesign `young_female_gentle` / `mature_male_deep`、Base x-vector（需中文参考）。
+2. **默认 `vivian` 被 2026-11-24 人工试听否决**：12 条均值自然 2.58/机械 3.25；短句中性 A28 2/5、7 条情绪中 6 条差（`fast` 仅勉强）。改为多 Profile 候选：VoiceDesign `cute_girl`、CustomVoice `ryan`、VoiceDesign `young_female_gentle` / `mature_male_deep`、Base x-vector（需中文参考）；不要求唯一音色。
 3. **情绪不能算通过**：GGML Base 400 拒绝 instruct；CustomVoice `vivian` 6/7 主观不合格（`fast` 仅“勉强”）；全部 experimental。
 4. **1.7B 与 9B 并发 LLM Decode −61.0%/−61.7%**；0.6B −59.2%；默认必须 `llm_priority`，overlap 仅实验，sentence_interleave unsupported。
 5. **04B DECISION 摘要的 0.6B/1.7B 口径已更正**：详细表是 0.6B（−57.7%），本轮 1.7B 单独实测 −61.0%/−61.7%。
@@ -71,7 +72,7 @@
 ## 5. 待用户完成（阻塞最终验收）
 
 - [x] 盲听 `samples/04c-listening/A01…A29.wav` 并填分（2026-11-24 完成；默认 `vivian`/情绪被否）。
-- [ ] **从候选里选一个音色**：`cute_girl` / `ryan` / `young_female_gentle` / `mature_male_deep` / Base x-vector；选定后补 10 文本复测。
+- [ ] **建立多个 VoiceProfile（可并存）**：`cute_girl` / `ryan` / `young_female_gentle` / `mature_male_deep` / Base x-vector 都可保留；默认可选、不要求唯一；每个 Profile 独立补 10 文本复测。
 - [ ] 若选 Base 克隆：按 `docs/recording-guide-zh.md` 录 5–15 s 中文 WAV + 人工逐字 `ref_text`，跑 `tools/ref_audio_check.py`；ICL 暂不可用。
 - [ ] **情绪指令默认禁用**；若必须启用，先在选定音色上按指令 ≥20 次抽检，`fast` 也只能 experimental。
 - [ ] 确认 04D 是否把 Qwen 设为默认 TTS（未确认前保持 `none`，不静默改配置）。

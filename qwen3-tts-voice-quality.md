@@ -3,8 +3,8 @@
 > 任务书：`04C_任务书_Qwen音质情绪与GPU调度验收.md`（§3.1、§5 音色/克隆部分）
 > 执行环境：Windows 10 19045 / RTX 4090 24 GB / i7-13700KF / 32 GB；qwentts.cpp `2edb35f`（2026-11-17），MSVC 2022 + CUDA 12.9，`sm_89-real`；Codec `qwen-tokenizer-12hz-Q8_0.gguf`
 > 证据目录：`benchmarks/04c/`、`samples/04c-listening/`、`samples/04c-*`
-> 结论日期：2026-11-18（技术实测）；**2026-11-24 人工试听回填**
-> **状态：技术验证完成；29 条人工试听已完成，但默认 `vivian` 被否；候选为 VoiceDesign `cute_girl`/`young_female_gentle`/`mature_male_deep`、CustomVoice `ryan`、Base x-vector。中文参考/克隆仍 Pending。最终判定见 `qwen3-tts-decision-04c.md` §9。**
+> 结论日期：2026-11-18（技术实测）；**2026-11-24 人工试听回填；2026-11-25 多 Profile 修订**
+> **状态：技术验证完成；29 条人工试听已完成；不要求唯一音色。`vivian` 默认被否；`cute_girl`/`young_female_gentle`/`mature_male_deep`/`ryan`/Base x-vector 是候选/待复测 Profile；中文参考/ICL 仍 Pending。最终判定见 `qwen3-tts-decision-04c.md` §9 与 `voice-profile-design-04c.md`。**
 
 ---
 
@@ -14,7 +14,21 @@
 2. **本轮没有“最终中文参考音频”**：没有用户提供/授权的中文 5–15 s 干净录音；现有 `assets/ref_zh_prompt_audio1_*.wav` 实际是 **MOSS 的英文女声**（11.73 s），只做了技术对照，不代表目标中文音色。任何第三方中文 demo 声音（MOSS 仓库自带的 `reference_zh*.wav`）**没有**被拿来克隆。
 3. **x-vector vs ICL 有明确取舍**：同一英文参考下，ICL 的音色余弦从 0.52–0.59 提高到 0.74–0.80，但因为 `ref_text` 是 FunASR 自动转写（未校对）且是英文，ICL 出现英文起头泄漏（“Really…”）与中文漏字，CER 从 0% 升到 4.8–14.3%。**ICL 只能配"中文参考 + 人工逐字校对 ref_text"使用**，不能拿自动转写当 ICL 基准。
 4. **CustomVoice 是本轮唯一无需用户录音即可给出中文音色的路径**：1.7B `vivian` / `serena` 等 9 个官方预设说话人；10 组固定文本 CER 1.64%，与 Base 的 1.42% 同级；常驻显存比 Base 少约 0.46 GB（无 speaker encoder）。
-5. **人工试听已完成（2026-11-24）**：29/29 条评分回收。结论：默认 `vivian` 被否；可用的主观候选是 VoiceDesign `cute_girl`（5/5/5/5/1）、CustomVoice `ryan`（4/4/5/5/1）、VoiceDesign `young_female_gentle` / `mature_male_deep`，以及需中文参考的 Base x-vector。详见 `qwen3-tts-decision-04c.md` §9。
+5. **人工试听已完成（2026-11-24）**：29/29 条评分回收。默认 `vivian` 被否；主观候选是 VoiceDesign `cute_girl`（5/5/5/5/1）、CustomVoice `ryan`（4/4/5/5/1）、VoiceDesign `young_female_gentle` / `mature_male_deep`，以及需中文参考的 Base x-vector。详见 `qwen3-tts-decision-04c.md` §9。
+
+---
+
+## 1.1 VoiceProfile 分类（2026-11-25 收尾）
+
+04C 不再要求“选一个最终音色”。以下三类 Profile 可以并存；每一行只是**当前证据状态**，不是唯一赢家：
+
+| Profile 类型 | 后端/模式 | 当前候选与样本量 | 状态 |
+| --- | --- | --- | --- |
+| `reference_clone` | Base x-vector / ICL | 英文参考 5 条 x-vector；ICL 1 条 | x-vector 条件适用（需中文参考 + T07 复测）；ICL **Pending/No-Go**（可懂度 2） |
+| `builtin_speaker` | CustomVoice 1.7B | 9 speaker；`ryan` 1 条、`vivian` 12 条、`serena`/`uncle_fu`/`aiden` 各 1 条 | `ryan` 单样本候选；`vivian` 不作默认；其余当前不推荐；每个 speaker 独立复测 |
+| `designed_voice` | VoiceDesign 1.7B | 6 条描述；`cute_girl`/`young_female_gentle`/`mature_male_deep` 各 1 条 | 3 条候选、3 条拒绝；逐描述复测，不能整体判定 |
+
+> **样本量限制**：除 Base x-vector 的 5 条和 `vivian` 的 12 条外，多数 speaker/描述只有 1 条样本。不得把单条高分写成“稳定、全面验收通过”；也不得把某一候选写成系统唯一音色。
 
 ---
 
@@ -150,6 +164,7 @@ icl_s2026 hyp: Really今天的工作已经完成了，我们可以一起学习�
   - ICL A04 4/4/3/2/2：可懂度 2，不通过。
   - 0.6B CV A29 3/1/2/3/4：不通过。
 - 详细汇总与最终判定：`qwen3-tts-decision-04c.md` §9。
+- **这些候选可以并存**：`cute_girl`、`ryan`、`young_female_gentle`、`mature_male_deep`、Base x-vector 可分别建 Profile；不要求只选一个，也不把任何一个写成系统唯一音色。
 
 ---
 

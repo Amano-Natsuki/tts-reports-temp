@@ -2,8 +2,22 @@
 
 > 依据：`qwen3-tts-voice-quality.md`、`qwen3-tts-emotion.md`、`qwen3-tts-concurrency.md`、本轮原始数据 `benchmarks/04c/`、以及 2026-11-24 回收的 29 条人工试听评分（`docs/listening-sheet-04c.md` + `docs/listening-key-04c.md`）。
 > 环境：Windows 10 19045 / RTX 4090 24 GB / i7-13700KF / 32 GB；qwentts.cpp **`2edb35f`**（2026-11-17），MSVC 2022 + CUDA 12.9，`sm_89-real`。
-> 日期：2026-11-18 技术实测；**2026-11-24 人工试听回填并修订判定**。
-> **最终判定：`CONDITIONAL GO`（2026-11-24 修订）**——技术门槛通过，但人工试听已完成并**否决当前默认 `vivian` 与全部 CustomVoice 情绪指令**；必须换音色、补 10 文本复测后才能转 GO。当前配置单独判定：**`vivian` 默认 = NO-GO，情绪指令 = NO-GO/experimental**。
+> 日期：2026-11-18 技术实测；**2026-11-24 人工试听回填；2026-11-25 按多音色产品需求修订**。
+> **最终判定：`CONDITIONAL GO`（整体，按 VoiceProfile 分级）**——技术门槛通过；29/29 人工试听保留，`vivian` 默认被否，情绪指令不得正式启用；但**不再要求选定唯一最终音色**，改为多 Profile 目录：每个 Profile 独立验收、默认可选。逐 Profile 状态见 §9 与 `voice-profile-design-04c.md`。当前未配置默认 Profile 时，`providers.tts.type` 保持 `none`。
+
+---
+
+## 0. 2026-11-25 多音色修订（本轮收尾）
+
+产品需求已明确：桌面助手需要**多音色自由管理和切换**，默认音色只是用户偏好，不是系统只能有一个永久说话人。因此 04C 的收尾动作从“选一个最终赢家”改为：
+
+1. 保留并解释 29/29 条盲听分数（不重评、不覆盖）；
+2. 把候选整理为 `reference_clone` / `builtin_speaker` / `designed_voice` 三类 `VoiceProfile`，可并存；
+3. 按 Profile 分别标记：已验证 / 候选待复测 / Pending / NO-GO；
+4. 明确用户中文参考音频与 ICL 仍待导入/校对；
+5. 为 04F Voice Library 提供数据结构、兼容矩阵和选择优先级建议。
+
+> **不要求用户只选一个声音**；`cute_girl`、`ryan`、`young_female_gentle`、`mature_male_deep`、Base x-vector 等都作为候选 Profile / 待复测 Profile 保留。详细设计见 [`voice-profile-design-04c.md`](voice-profile-design-04c.md)。
 
 ---
 
@@ -22,6 +36,7 @@
 | 中文参考/克隆 | ⚠️ **Pending** | 无用户中文参考；ICL 单项 A04 可懂度 2（不达标）；x-vector 可用但需中文参考复测 |
 | 试听数据完整性 | ⚠️ **分数完整，环境记录缺失** | 29/29 有分、无缺分/越界/缺解码；§1 的耳机/播放器/房间未记录（见 `listening-sheet-04c.md` §1） |
 | 当前默认音色 `vivian` | ❌ **NO-GO** | 情绪/中性/慢速均被否；仅部分长文本（A08/A16/A26）尚可，不能作为无条件默认 |
+| 多 Profile 方案 | ✅ **已定义** | `reference_clone`/`builtin_speaker`/`designed_voice` 并存；默认只是偏好；见 `voice-profile-design-04c.md` |
 
 **判定理由**：
 
@@ -32,7 +47,7 @@
 
 ---
 
-## 2. 推荐方案（04D 接入配置；音色待用户选定）
+## 2. 推荐方案（04D 接入配置；Profile 待建，不要求唯一）
 
 ### 2.1 后端与模型
 
@@ -52,27 +67,28 @@
 | 并发 | `tts-server` 默认 `max_batch=1`；Provider 侧显式排队，不假设可并发合成多段 |
 | 取消 | 客户端断连（已验证真停）；不需要显式 cancel 端点 |
 
-### 2.2 声音策略（2026-11-24 按主观评分修订）
+### 2.2 Profile 策略（多音色；2026-11-25 修订）
 
 **默认路径：暂不冻结；`providers.tts.type=none` 保持安全默认。**
 
-2026-11-24 的 29 条盲听否决了原默认 `vivian`。在用户选定并完成 10 文本复测之前，不要把任何 Qwen 音色设为默认；04D Provider 可以保留，但用户不显式启用就不发声。
+2026-11-24 的 29 条盲听否决了原默认 `vivian`。产品上允许多个 `VoiceProfile` 并存；用户可设置一个全局默认偏好，也可以暂不设置。未设置默认或当前 Profile 与已加载 Talker 不兼容时，语音进入明确的“未配置/不可用”状态，**不得静默回退到 `vivian`**。
 
-**候选音色（按哥哥的主观评分）**：
+**候选 Profile（可并存；复测顺序不是唯一选择）**：
 
-| 优先级 | 候选 | 评分（音色相似/自然度/情绪符合/可懂度/机械感） | 适用性 |
+| 复测顺序 | 候选 Profile | 评分（音色相似/自然度/情绪符合/可懂度/机械感） | 当前状态 |
 | --- | --- | --- | --- |
-| 1 | **VoiceDesign `cute_girl`**（可爱小女孩，音调高，轻快） | **5/5/5/5/1** | 女性/可爱陪伴首选；仅 1 条样本，必须补 10 文本并修复“头部吞字” |
-| 2 | **CustomVoice `ryan`** | **4/4/5/5/1** | 男性首选；仅 1 条样本，需补测 |
+| 1 | **VoiceDesign `cute_girl`**（可爱小女孩，音调高，轻快） | **5/5/5/5/1** | 女性/可爱候选；仅 1 条样本，必须补 10 文本并修复“头部吞字” |
+| 2 | **CustomVoice `ryan`** | **4/4/5/5/1** | 男性候选；仅 1 条样本，需补测 |
 | 3 | **VoiceDesign `young_female_gentle`**（年轻女性，温柔，偏低） | 4/4/4/5/2 | 稳健女性候选；有一点点电音感 |
 | 4 | **VoiceDesign `mature_male_deep`**（成年男性，沉稳磁性） | 4/4/3/5/2 | 男性备选；接近真人但还不够 |
-| 5 | **Base x-vector**（当前英文参考） | 5 条均值 4.00/3.80/N/A/4.60/2.00 | 自然度最高、但 T07 绕口令差；且参考不是中文，需用户提供中文参考后复测 |
+| 5 | **Base x-vector**（当前英文参考） | 5 条均值 4.00/3.80/N/A/4.60/2.00 | 自然度最高、但 T07 绕口令差；参考不是中文，需用户提供中文参考后复测 |
 | — | **CustomVoice `vivian`** | 12 条均值 3.75/2.58/2.43/4.08/3.25 | **不作为默认**；A08/A16/A26 长文本尚有头/尾吞字，短句/中性/情绪被否 |
-| — | `serena` / `uncle_fu` / `aiden` | 4/1/4/5、3/1/5/4、1/1/3/5（单条） | 均不推荐 |
+| — | `serena` / `uncle_fu` / `aiden` | 4/1/4/5、3/1/5/4、1/1/3/5（单条） | 当前不推荐；不作为候选默认 |
 | — | VoiceDesign `news_anchor` / `stern_male` / `old_male_hoarse` | 1/1/2/3/5、1/1/1/3/5、2/2/2/5/4 | 电音/低沉/无起伏，拒绝 |
 | — | CustomVoice 0.6B `vivian` | 3/1/2/3/4 | 拒绝 |
-| — | Base ICL（EN 自动 ref_text） | 4/4/3/2/2 | 可懂度 2，拒绝 |
+| — | Base ICL（EN 自动 ref_text） | 4/4/3/2/2 | 可懂度 2，暂不启用 |
 
+> **这些 Profile 可同时存在，不是“五选一”。** “复测顺序”只表示建议先补哪几个的 10 文本样本；用户可以选择任意组合、设置任意默认偏好，甚至不设默认。
 > 对 CustomVoice/VoiceDesign，`音色相似` 列按“音色是否符合期望/角色感”解读，不是克隆余弦。
 
 **当前 `vivian` 的可用边界**：A08（T10）、A16（T01）、A26（T03）三条长文本尚可（自然度 3–5、机械感 1–2），但 A28（T11 中性）自然度 2/机械感 5、A01 slow/A06 sad/A13 gentle 等情绪全部差。**结论：`vivian` 只能作为“长文本候选”保留，不能作为默认，也不能用于情绪控制。**
@@ -151,14 +167,14 @@ instructions = "<中文/英文音色描述>"
 
 ## 5. 需要用户本人完成的事项
 
-1. **盲听已完成（2026-11-24）**：29/29 条已评分并解码；结果见 §9。剩余动作是**从候选里选一个音色**，不是重新盲听。
-2. **选音色路线**（按 §9 推荐）：
-   - A. **女性/可爱陪伴**：优先 `VoiceDesign cute_girl`（5/5/5/5/1）或更稳健的 `young_female_gentle`（4/4/4/5/2）。
-   - B. **男性**：`CustomVoice ryan`（4/4/5/5/1）或 `VoiceDesign mature_male_deep`（4/4/3/5/2）。
-   - C. **自然度/克隆**：Base x-vector（5 条均值自然 3.80/机械 2.00），但需提供中文参考并复测 T07；当前英文参考不作最终音色。
-   - **不再把 `vivian` 作为默认**。
-3. **确认情绪需求**：本轮 7 条 vivian 情绪中 6 条不合格，`fast` 仅“勉强”；建议**正式禁用所有情绪指令**，最多把 `fast` 留作 experimental 重测。若必须做情绪，需要先换一个主观合格的音色，再按指令 ≥20 次抽检。
-4. **确认默认是否切换**：在选定音色并完成 10 文本复测前，`providers.tts.type` 保持 `none`；不要静默改默认。
+1. **盲听已完成（2026-11-24）**：29/29 条已评分并解码；结果见 §9。**不再要求从候选中选唯一音色**。
+2. **建立多个 VoiceProfile（可并存）**：
+   - 将 `cute_girl`、`ryan`、`young_female_gentle`、`mature_male_deep` 等建成独立 Profile；Base x-vector/ICL 也作为独立 Profile；
+   - 用户可设置一个全局默认偏好，也可以暂不设置；还可以按会话/单次回复覆盖；
+   - 每个 Profile 独立补 10 文本复测；不是“五选一”。
+3. **导入用户个人参考音频（Pending）**：按 `docs/recording-guide-zh.md` 提供 5–15 s、24 kHz+、单声道、干净 WAV；ICL 另需人工逐字校对 `ref_text`，跑 `tools/ref_audio_check.py`；当前仓库中没有找到用户中文参考，不能假定已存在。
+4. **情绪指令**：7 条 vivian 情绪中 6 条不合格、`fast` 仅“勉强”；建议全部标 experimental/默认禁用。若必须做情绪，先在选定的单个 Profile 上按指令 ≥20 次抽检；不得因为换了音色就自动继承旧结论。
+5. **默认是否切换**：在任何 Profile 完成 10 文本复测前，`providers.tts.type` 保持 `none`；不要静默改默认。未设置默认 Profile 时，语音进入“未配置”状态（文字仍可用），而不是回退到 `vivian`。
 
 ---
 
@@ -170,7 +186,8 @@ providers:
   tts:
     type: none                 # 安全默认；用户选定音色并复测后才显式改 qwen3_tts
     base_url: http://127.0.0.1:8095
-    voice: <user-selected>     # 候选：cute_girl / young_female_gentle / ryan / mature_male_deep / Base ref
+    voice: <user-selected>     # 04F 前仍是单 voice；04F 改为 voice_profile_id，见 voice-profile-design-04c.md
+    # 04F 目标：voice_profile_id: <profile-id>；当前 voice 仅为兼容字段
     language: Chinese
     response_format: pcm
     # 初始实验值，04D 用真实 AudioPlayer 复测后再冻结
@@ -206,19 +223,22 @@ tts-server.exe `
 > 以下内容供合并到 `F:\AI_Project_Development\docs\IMPLEMENTATION_STATUS.md`，本轮**没有修改主项目**。
 
 ```markdown
-### Phase 04C 人工试听回填（2026-11-24，独立实验，未合并代码）
+### Phase 04C 收尾：多音色 VoiceProfile（2026-11-25，仅文档，未改主项目代码）
 
-- 29/29 条匿名样本已由用户本人盲听并填分；无缺分/越界/缺解码。设备/环境记录未填（不影响分数有效性）。
-- 判定更新：**CONDITIONAL GO（整体）**；**当前默认 `vivian` 与全部 CustomVoice 情绪指令单独 = NO-GO**。
-- 主观结果（均值，机械感越低越好）：
-  - Base x-vector n=5：音色 4.00 / 自然 3.80 / 可懂 4.60 / 机械 2.00；T07 绕口令弱。
-  - CV 1.7B n=16：3.56 / 2.38 / 4.12 / 3.38；仅 `ryan` 单项 4/4/5/5/1；`vivian` 短句/中性/情绪差。
-  - VoiceDesign n=6：2.83 / 2.83 / 4.33 / 3.17；`cute_girl` 5/5/5/5/1、`young_female_gentle` 4/4/4/5/2、`mature_male_deep` 4/4/3/5/2 可用；news/stern/old 差。
-  - CV 0.6B n=1：3/1/2/3/4；ICL n=1：4/4/2/2（可懂度 2）。
-- 情绪：vivian 的 neutral/gentle/happy/sad/angry/slow 全部不合格；`fast` 4/4/3/3/2 仅“勉强”，全部标 experimental，不得正式使用。
-- 推荐候选：`VoiceDesign cute_girl`（女性/可爱，需补 10 文本并修复头部吞字）、`CustomVoice ryan`（男性，需补测）、`VoiceDesign young_female_gentle` / `mature_male_deep`、`Base x-vector`（需中文参考）。
-- `providers.tts.type` 保持 `none`；未选定音色并完成 10 文本复测前不切默认。未改生产代码。
-- 详情：`F:\AI_Project\Qwen3-TTS-Experiments\docs\qwen3-tts-decision-04c.md` §9。
+- 29/29 条匿名试听分数保留；`vivian` 默认和当前 CustomVoice 情绪指令不通过，不能写“音质/情绪验收通过”。
+- 04C **不再要求选定唯一默认音色**：按 `reference_clone` / `builtin_speaker` / `designed_voice` 建立多个
+  VoiceProfile；默认音色只是用户偏好，支持全局/会话/单次回复三级选择。
+- qwentts.cpp `2edb35f` 实测：一个 `tts-server` 固定加载一个 Talker；Base 可在同一进程注册多个克隆 voice
+  （内存注册表，重启丢失，需要应用侧重新注册）；CustomVoice 仅当前 9 个 speaker；VoiceDesign 用固定描述；
+  Base/CustomVoice/VoiceDesign 不能在同一已加载实例中无重启切换。
+- 当前候选：VD `cute_girl`、CV `ryan`、VD `young_female_gentle`/`mature_male_deep`、Base x-vector
+  均为**候选/待复测 Profile**，不是“唯一赢家”；单样本评分不能写成全面通过。
+- 用户中文参考音频/人工校对 ref_text 仍未提供；ICL 保持 Pending/No-Go；Base instruct 不可用。
+- 当前 `providers.tts.type` 保持 `none`；未设置默认 Profile 时语音进入“未配置”状态，禁止回退 `vivian`。
+- 04F 实现 Voice Library / VoiceProfile CRUD、导入与资产生命周期、Profile 兼容标记、三级选择、
+  与 04E Runtime 的模型切换协作；本次未改生产代码。
+- 详情：`F:\AI_Project\Qwen3-TTS-Experiments\docs\voice-profile-design-04c.md`、
+  `qwen3-tts-decision-04c.md` §9。
 ```
 
 ---
@@ -233,12 +253,13 @@ tts-server.exe `
 | 原始探测 | `benchmarks/04c/**`（每个 case 有 probe JSON + WAV） |
 | 匿名试听 | `samples/04c-listening/A01…A29.wav`、`docs/listening-key-04c.md`、`docs/listening-sheet-04c.md` §10 |
 | 试听解码/汇总 | `benchmarks/04c/listening-scores.json`、`benchmarks/04c/listening-summary.md`、`tools/analyze_listening_04c.py` |
+| 多音色 Profile 设计 | `docs/voice-profile-design-04c.md` |
 | 契约拒绝 | `benchmarks/04c/contract-base.json`、`contract-cv.json`、`contract-vd.json` |
 | 模型家族/源码依据 | `research/04c-model-families.md` |
 
 ---
 
-## 9. 人工试听回填与最终判定（2026-11-24）
+## 9. 人工试听回填与多 Profile 判定（2026-11-24 / 2026-11-25）
 
 ### 9.1 评分完整性
 
@@ -302,28 +323,30 @@ tts-server.exe `
 | 成熟女性，新闻播报 | 1 | 1 | 2 | 3 | **5** | ❌ 电音感极重 |
 | 严肃男性，低音，命令式 | 1 | 1 | 1 | 3 | **5** | ❌ 语调过低 |
 
-### 9.6 最终音色选择建议
+### 9.6 候选 Profile 目录（可并存，不是唯一赢家）
 
-**按哥哥的评分，不再推荐 `vivian` 作为默认。** 推荐顺序：
+**按哥哥的评分，`vivian` 不再作为默认。** 以下 Profile 都可以保留在 Voice Library 中，分别复测；**不是五选一**：
 
-1. **女性/可爱陪伴首选：VoiceDesign `cute_girl`**（5/5/5/5/1）。唯一明显 5 分档的样本；但只有 1 条，且“头部吞字”，必须补 10 文本复测后再定。
-2. **男性首选：CustomVoice `ryan`**（4/4/5/5/1）。单样本“整体不错”，机械感 1、可懂度 5；同样需补 10 文本。
-3. **稳健女性备选：VoiceDesign `young_female_gentle`**（4/4/4/5/2）。比 `cute_girl` 更成人、更稳，适合不想太幼的陪伴角色。
-4. **男性备选：VoiceDesign `mature_male_deep`**（4/4/3/5/2）。
-5. **自然度/克隆优先：Base x-vector**（5 条均值 4.00/3.80/N/A/4.60/2.00）。自然度最高，但当前是英文参考、T07 绕口令弱；只有用户提供并接受中文参考后才可作为最终音色。
-6. **`vivian` 仅保留为长文本候选**：A08/A16/A26 尚可，但 A28 中性、A01/A06/A13 情绪均被否，不能默认。
-7. **拒绝**：`serena`、`uncle_fu`、`aiden`、0.6B CV、ICL、VD `news_anchor`/`stern_male`/`old_male_hoarse`。
+| 复测顺序 | Profile | 评分 | 当前状态 / 下一步 |
+| --- | --- | --- | --- |
+| 1 | VoiceDesign `cute_girl` | 5/5/5/5/1 | 女性/可爱候选；仅 1 条，头部吞字；补 10 文本 |
+| 2 | CustomVoice `ryan` | 4/4/5/5/1 | 男性候选；仅 1 条；补 10 文本 |
+| 3 | VoiceDesign `young_female_gentle` | 4/4/4/5/2 | 稳健女性候选；补 10 文本 |
+| 4 | VoiceDesign `mature_male_deep` | 4/4/3/5/2 | 男性备选；补 10 文本 |
+| 5 | Base x-vector | 5 条均值 4.00/3.80/N/A/4.60/2.00 | 自然度最高；需中文参考 + T07 复测 |
+| — | `vivian` | 12 条均值 3.75/2.58/4.08/3.25 | 长文本候选；不作默认，不可用于情绪 |
+| — | `serena`/`uncle_fu`/`aiden`/0.6B/ICL/VD news-stern-old | 见上文 | 当前不建默认 Profile；可作为历史/对照 |
 
 > 对 CV/VD，`音色相似` 是“是否符合期望/角色感”，不是克隆余弦；不能拿它和 Base 的克隆余弦直接横比。
 
-### 9.7 三类路径的适用性判定
+### 9.7 三类路径的 Profile 适用性
 
-| 路径 | 判定 | 依据与条件 |
+| Profile 类型 | 判定 | 依据与条件 |
 | --- | --- | --- |
-| **Base 克隆（x-vector）** | **条件适用** | 自然度 3.80/机械 2.00/可懂 4.60，普通文本 A03/A22/A23/A24 好；T07 A15 弱；当前英文参考不是最终中文音色。需中文 5–15 s 参考 + 10 文本复测；ICL 待重测。 |
-| **Base 克隆（ICL）** | **暂不适用** | A04 音色 4/自然 4，但可懂度 **2**；自动英文 ref_text 导致开头残留/漏字。必须中文参考 + 人工逐字 `ref_text`，当前不得启用。 |
-| **CustomVoice** | **仅 `ryan` 条件适用，`vivian` 不适用** | `ryan` 4/4/5/5/1（单样本）；`vivian` 12 条均值 3.75/2.58/4.08/3.25，短句/中性/情绪差；`serena`/`uncle_fu`/`aiden` 均差。不能整体说“CustomVoice 通过”。 |
-| **VoiceDesign** | **按描述条件适用** | 6 条中 3 条好（cute/young female/mature male）、3 条差（news/stern/old）；不能整体默认，只能逐描述验收。 |
+| **reference_clone（x-vector）** | **条件适用** | 自然度 3.80/机械 2.00/可懂 4.60，普通文本 A03/A22/A23/A24 好；T07 A15 弱；当前英文参考不是最终中文音色。需中文 5–15 s 参考 + 10 文本复测。 |
+| **reference_clone（ICL）** | **Pending/暂不适用** | A04 音色 4/自然 4，但可懂度 **2**；自动英文 ref_text 导致开头残留/漏字。必须中文参考 + 人工逐字 `ref_text`，当前不得启用。 |
+| **builtin_speaker** | **仅 `ryan` 条件候选，`vivian` 不适用** | `ryan` 4/4/5/5/1（单样本）；`vivian` 12 条均值 3.75/2.58/4.08/3.25，短句/中性/情绪差；`serena`/`uncle_fu`/`aiden` 均差。不能整体说“CustomVoice 通过”。 |
+| **designed_voice** | **按描述条件适用** | 6 条中 3 条好（cute/young female/mature male）、3 条差（news/stern/old）；不能整体默认，只能逐描述验收。 |
 
 ### 9.8 情绪指令的正式可用性
 
@@ -338,13 +361,13 @@ tts-server.exe `
 
 ### 9.9 最终决策
 
-**总判定：`CONDITIONAL GO`（整体）/ 当前默认 `vivian` 与全部情绪指令 `NO-GO`。**
+**总判定：`CONDITIONAL GO`（整体）/ 当前默认 `vivian` 与全部正式情绪指令 `NO-GO`。**
 
-- **为什么不是 GO**：用户已明确否决当前默认音色与全部情绪；换音色后的 10 文本复测尚未做；中文参考/克隆未验收。
-- **为什么不是 NO-GO（整体）**：技术、显存、并发、取消、稳定性都过；主观评分给出了明确可用候选（VD `cute_girl`、CV `ryan`、VD `young_female_gentle`/`mature_male_deep`、Base x-vector）。
-- **转 GO 的条件**：
-  1. 从 §9.6 选定一个候选（不再用 `vivian` 默认）；
-  2. 用同一套 5 维量表补 10 文本（T01/T03/T04/T07/T10 + 5 条长句/情绪）复测，至少 3 条/类；
-  3. 情绪指令默认禁用；若以后启用，需在选定音色上按指令 ≥20 次抽检 + 人耳；
+- **为什么不是 GO**：`vivian` 默认被否；当前没有完成 10 文本复测的 Profile；用户中文参考/ICL 未验收；情绪全部 experimental。
+- **为什么不是 NO-GO（整体）**：技术、显存、并发、取消、稳定性都过；29 条评分给出了多个可继续的候选 Profile（VD `cute_girl`、CV `ryan`、VD `young_female_gentle`/`mature_male_deep`、Base x-vector）。
+- **转 GO 的条件（按 Profile 分别判定）**：
+  1. 建立 Voice Library，把候选建成**多个** Profile；默认可选，不要求唯一；
+  2. 每个 Profile 用同一套 5 维量表补 10 文本（T01/T03/T04/T07/T10 + 5 条长句/情绪）复测，至少 3 条/类；
+  3. 情绪指令默认禁用；若以后启用，只在单个 Profile 上按指令 ≥20 次抽检 + 人耳；
   4. Base/ICL 只接受用户中文参考 + 人工校对 `ref_text`；
-  5. 在以上完成前，`providers.tts.type` 保持 `none`。
+  5. 在以上完成前，`providers.tts.type` 保持 `none`；未设置默认 Profile 时语音“未配置”，不得回退 `vivian`。

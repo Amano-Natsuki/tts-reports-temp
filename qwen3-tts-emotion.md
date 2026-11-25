@@ -18,6 +18,23 @@
 
 ---
 
+## 1.1 VoiceProfile 与 SpeechStyle 必须分离
+
+| 概念 | 负责什么 | 当前可用性 |
+| --- | --- | --- |
+| `VoiceProfile` | 音色身份：谁在说话（Base 参考克隆 / CustomVoice speaker / VoiceDesign 描述） | 多 Profile 可并存；每类/每个 Profile 独立验收，不等于动态情绪能力 |
+| `SpeechStyle` | 单次表达风格（如 happy/sad/angry/慢/快） | 当前没有可正式启用的稳定能力；只能作为后续研究项 |
+
+| 模式 | `instructions` 的真实语义 | 结论 |
+| --- | --- | --- |
+| Base GGML | 不支持 | HTTP 400；Provider 必须拒绝，不得伪造 |
+| CustomVoice | 可选风格指令，按 speaker 生效 | `vivian` 6/7 不合格、`fast` 仅“勉强”；所有 speaker/指令分别 experimental，不能整体开关 |
+| VoiceDesign | 固定的音色设计描述（gender/age/pitch/style），不是逐句情绪参数 | 可作为 `designed_voice` Profile 的固定描述；不能拿同一 `instructions` 字段当 happy/sad/angry 控制 |
+
+> 因此：**换音色 Profile 不会自动获得情绪控制**；某 speaker 的 `fast` 结果不能外推到另一个 Profile；VoiceDesign 描述合格也不代表动态情绪合格。
+
+---
+
 ## 2. 关键契约：Base 不能 instruct（GGML）
 
 | 请求 | HTTP | 响应 |
