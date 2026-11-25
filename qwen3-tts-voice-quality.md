@@ -3,8 +3,8 @@
 > 任务书：`04C_任务书_Qwen音质情绪与GPU调度验收.md`（§3.1、§5 音色/克隆部分）
 > 执行环境：Windows 10 19045 / RTX 4090 24 GB / i7-13700KF / 32 GB；qwentts.cpp `2edb35f`（2026-11-17），MSVC 2022 + CUDA 12.9，`sm_89-real`；Codec `qwen-tokenizer-12hz-Q8_0.gguf`
 > 证据目录：`benchmarks/04c/`、`samples/04c-listening/`、`samples/04c-*`
-> 结论日期：2026-11-18
-> **状态：技术验证完成；中文参考音频与人工试听仍是 Pending。最终决策最多 CONDITIONAL GO，本文不替用户签主观音质验收。**
+> 结论日期：2026-11-18（技术实测）；**2026-11-24 人工试听回填**
+> **状态：技术验证完成；29 条人工试听已完成，但默认 `vivian` 被否；候选为 VoiceDesign `cute_girl`/`young_female_gentle`/`mature_male_deep`、CustomVoice `ryan`、Base x-vector。中文参考/克隆仍 Pending。最终判定见 `qwen3-tts-decision-04c.md` §9。**
 
 ---
 
@@ -14,7 +14,7 @@
 2. **本轮没有“最终中文参考音频”**：没有用户提供/授权的中文 5–15 s 干净录音；现有 `assets/ref_zh_prompt_audio1_*.wav` 实际是 **MOSS 的英文女声**（11.73 s），只做了技术对照，不代表目标中文音色。任何第三方中文 demo 声音（MOSS 仓库自带的 `reference_zh*.wav`）**没有**被拿来克隆。
 3. **x-vector vs ICL 有明确取舍**：同一英文参考下，ICL 的音色余弦从 0.52–0.59 提高到 0.74–0.80，但因为 `ref_text` 是 FunASR 自动转写（未校对）且是英文，ICL 出现英文起头泄漏（“Really…”）与中文漏字，CER 从 0% 升到 4.8–14.3%。**ICL 只能配"中文参考 + 人工逐字校对 ref_text"使用**，不能拿自动转写当 ICL 基准。
 4. **CustomVoice 是本轮唯一无需用户录音即可给出中文音色的路径**：1.7B `vivian` / `serena` 等 9 个官方预设说话人；10 组固定文本 CER 1.64%，与 Base 的 1.42% 同级；常驻显存比 Base 少约 0.46 GB（无 speaker encoder）。
-5. **人工试听 Pending**：已生成 29 条匿名盲听样本（`samples/04c-listening/A01…A29.wav`）与解码表 `docs/listening-key-04c.md`，评分表 `docs/listening-sheet-04c.md`。**在用户填完之前，不能写"音色验收通过"。**
+5. **人工试听已完成（2026-11-24）**：29/29 条评分回收。结论：默认 `vivian` 被否；可用的主观候选是 VoiceDesign `cute_girl`（5/5/5/5/1）、CustomVoice `ryan`（4/4/5/5/1）、VoiceDesign `young_female_gentle` / `mature_male_deep`，以及需中文参考的 Base x-vector。详见 `qwen3-tts-decision-04c.md` §9。
 
 ---
 
@@ -136,24 +136,20 @@ icl_s2026 hyp: Really今天的工作已经完成了，我们可以一起学习�
 
 ---
 
-## 6. 人工试听（Pending）
+## 6. 人工试听（已完成，2026-11-24）
 
-已准备 **29 条匿名样本**：
+**29/29 条已由哥哥本人盲听并评分**（评分表 `docs/listening-sheet-04c.md` §10；解码表 `docs/listening-key-04c.md` 已可复核）。
 
 - 目录：`samples/04c-listening/A01.wav … A29.wav`
-- 解码表（评分前不要看）：`docs/listening-key-04c.md`
-- 评分表：`docs/listening-sheet-04c.md` §10
-- 覆盖：Base x-vector 5 条、CustomVoice vivian 5 条、其他 speaker 4 条、VoiceDesign 6 条、vivian 情绪 7 条、ICL 泄漏 1 条、0.6B CustomVoice 1 条。
-- 文本编号：T01/T03/T04/T07/T10（10 组固定样例）+ T11（短句，音色/情绪）。
-
-**请用户本人完成**：
-
-1. 用同一副耳机/音箱、同一音量，按 `listening-sheet-04c.md` 的 1–5 分量表盲听；
-2. 重点听：T03 长句是否吞字、T04 数字读法、T07 绕口令、T11 音色是否喜欢/像目标角色；
-3. 听 ICL 的 A04 是否会先冒英文（预期会）；
-4. 填完评分后再打开 `listening-key-04c.md` 解码，补模型/RTF/TTFA。
-
-**在用户签字前，本文的音色结论只能写"技术上可复现"，不能写"音质验收通过"。**
+- 覆盖：Base x-vector 5 条、CustomVoice vivian 5 条、其他 speaker 4 条、VoiceDesign 6 条、vivian 情绪 7 条、ICL 1 条、0.6B CustomVoice 1 条。
+- 文本：T01/T03/T04/T07/T10 + T11。
+- **结果**：
+  - 默认 `vivian` 被否：12 条均值自然 2.58/机械 3.25；A28 中性 3/2/2/4/5，A06 sad 4/1/1/3/5，A13 gentle 4/1/3/4/5。
+  - 可用候选：VoiceDesign `cute_girl` 5/5/5/5/1、CustomVoice `ryan` 4/4/5/5/1、VoiceDesign `young_female_gentle` 4/4/4/5/2、`mature_male_deep` 4/4/3/5/2。
+  - Base x-vector 5 条均值 4.00/3.80/N/A/4.60/2.00；T07 绕口令弱；当前英文参考不是最终中文音色。
+  - ICL A04 4/4/3/2/2：可懂度 2，不通过。
+  - 0.6B CV A29 3/1/2/3/4：不通过。
+- 详细汇总与最终判定：`qwen3-tts-decision-04c.md` §9。
 
 ---
 
@@ -163,7 +159,7 @@ icl_s2026 hyp: Really今天的工作已经完成了，我们可以一起学习�
 | --- | --- | --- |
 | 用户中文参考音频（5–15 s，干净） | **Pending** | 无法做最终中文音色/ICL 验收 |
 | 人工校对的中文 `ref_text` | **Pending** | ICL 不能用；自动转写已证明会漏字/英文起头 |
-| 人工盲听 29 条 | **Pending** | 音色/自然度/机械感/情绪符合无法签字 |
+| 人工盲听 29 条 | **✅ 已完成（2026-11-24）** | 默认 `vivian` 被否；候选见 §6 / decision §9 |
 | 0.6B Base 10 组 CER | 未做 | 不影响主推荐（0.6B 仅低显存档；CV 0.6B 简单句 CER 0） |
 | 真实 Windows 音频设备播放 | 未在本轮重测 | 04D 需用 `AudioPlayer` 复测 200–300 ms 预缓冲与欠载 |
 
